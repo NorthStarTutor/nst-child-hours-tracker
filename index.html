@@ -610,10 +610,64 @@ function getLim(age){
   return LIMITS.age16plus;
 }
 
+// ══ SUPABASE CONFIG ══
+const SB_URL='https://jthiyzbswiphwxjgfqvb.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0aGl5emJzd2lwaHd4amdmcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NDk2MDAsImV4cCI6MjA5MTIyNTYwMH0.MtPepWsArtz1aENzJXkYeS1cUHpYxZvW9jSfeElWoQs';
+const SB_HDR={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=representation'};
+
+// Offline write queue — flushed when connectivity restored
+let offlineQueue=[];
+let isOnline=navigator.onLine;
+window.addEventListener('online',()=>{isOnline=true;flushQueue();showNotif('Back online — syncing data','ok')});
+window.addEventListener('offline',()=>{isOnline=false;showNotif('Offline — data saved locally','warn')});
+
+async function sbFetch(path,opts={}){
+  const res=await fetch(SB_URL+'/rest/v1/'+path,{headers:SB_HDR,...opts});
+  if(!res.ok){const e=await res.text();throw new Error(e)}
+  const txt=await res.text();return txt?JSON.parse(txt):null;
+}
+async function sbInsert(table,row){
+  if(!isOnline){offlineQueue.push({table,row});saveQueue();return null}
+  try{return await sbFetch(table,{method:'POST',body:JSON.stringify(row)})}
+  catch(e){console.warn('Supabase insert failed, queuing:',e);offlineQueue.push({table,row});saveQueue();return null}
+}
+async function sbUpdate(table,id,row){
+  if(!isOnline){offlineQueue.push({op:'update',table,id,row});saveQueue();return null}
+  try{return await sbFetch(table+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify(row)})}
+  catch(e){console.warn('Supabase update failed, queuing:',e);offlineQueue.push({op:'update',table,id,row});saveQueue();return null}
+}
+async function sbDelete(table,id){
+  if(!isOnline){offlineQueue.push({op:'delete',table,id});saveQueue();return null}
+  try{return await sbFetch(table+'?id=eq.'+id,{method:'DELETE'})}
+  catch(e){console.warn('Supabase delete failed:',e);return null}
+}
+async function sbSelect(table,query=''){
+  try{return await sbFetch(table+(query?'?'+query:''))||[]}
+  catch(e){console.warn('Supabase select failed:',e);return[]}
+}
+function saveQueue(){try{localStorage.setItem('nst_queue',JSON.stringify(offlineQueue))}catch(e){}}
+function loadQueue(){try{const q=localStorage.getItem('nst_queue');if(q)offlineQueue=JSON.parse(q)}catch(e){}}
+async function flushQueue(){
+  if(!offlineQueue.length)return;
+  const remaining=[];
+  for(const item of offlineQueue){
+    try{
+      if(item.op==='update')await sbFetch(item.table+'?id=eq.'+item.id,{method:'PATCH',body:JSON.stringify(item.row)});
+      else if(item.op==='delete')await sbFetch(item.table+'?id=eq.'+item.id,{method:'DELETE'});
+      else await sbFetch(item.table,{method:'POST',body:JSON.stringify(item.row)});
+    }catch(e){remaining.push(item)}
+  }
+  offlineQueue=remaining;saveQueue();
+  if(!remaining.length)showNotif('All data synced ✓','ok');
+}
+
+// Current production ID (set after upsert on load)
+let productionId=null;
+
 // ══ STATE ══
 let S={
   children:[],entries:[],breaks:[],nonWorking:[],eduSessions:[],comments:[],
-  history:[], // array of wrapped days for spreadsheet
+  history:[],
   dayDone:false,
   prod:'',prodCompany:'',shootDate:'',callTime:'07:00',
   chapName:'',chapContact:'',
@@ -621,11 +675,13 @@ let S={
 };
 let editingId=null,editingEduId=null,currentPage='home',eventMode='working';
 
-// ══ STORAGE ══
+// ══ STORAGE — localStorage cache + Supabase sync ══
 function saveState(){
   const map={prodCompany:'prodCompany',prodTitle:'prod',shootDate:'shootDate',callTime:'callTime',chapName:'chapName',chapContact:'chapContact',safeName:'safeName',safeContact:'safeContact',safeEmail:'safeEmail'};
   Object.entries(map).forEach(([elId,key])=>{const el=document.getElementById(elId);if(el)S[key]=el.value.trim()});
   try{localStorage.setItem('nst_v4',JSON.stringify(S));flashSave();}catch(e){}
+  // Sync production record to Supabase
+  syncProduction();
 }
 function loadState(){
   try{const d=localStorage.getItem('nst_v4');if(d)S=Object.assign({history:[],eduSessions:[],nonWorking:[],prodCompany:'',safeEmail:''},S,JSON.parse(d));}catch(e){}
@@ -633,7 +689,78 @@ function loadState(){
   sv('chapName',S.chapName||'');sv('chapContact',S.chapContact||'');
   sv('safeName',S.safeName||'');sv('safeContact',S.safeContact||'');sv('safeEmail',S.safeEmail||'');
 }
-function flashSave(){const el=document.getElementById('saveInd');if(el){el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1500)}}
+function flashSave(){
+  const el=document.getElementById('saveInd');
+  if(el){el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1500)}
+}
+
+// ── Sync production settings ──
+async function syncProduction(){
+  if(!S.shootDate)return;
+  const row={title:S.prod,company:S.prodCompany,shoot_date:S.shootDate,call_time:S.callTime,chap_name:S.chapName,chap_contact:S.chapContact,safe_name:S.safeName,safe_contact:S.safeContact,safe_email:S.safeEmail};
+  if(productionId){
+    await sbUpdate('productions',productionId,row);
+  } else {
+    const res=await sbInsert('productions',row);
+    if(res&&res[0]){productionId=res[0].id;localStorage.setItem('nst_prod_id',productionId)}
+  }
+}
+
+// ── Load all data from Supabase on startup ──
+async function loadFromSupabase(){
+  showSyncStatus('Syncing with server…');
+  try{
+    // Restore production ID from local cache first
+    const cachedProdId=localStorage.getItem('nst_prod_id');
+
+    if(cachedProdId){
+      productionId=cachedProdId;
+      // Load cast
+      const dbCast=await sbSelect('cast_members','production_id=eq.'+productionId+'&order=created_at.asc');
+      if(dbCast&&dbCast.length){
+        S.children=dbCast.map(r=>({id:r.id,name:r.first_name,castNum:r.cast_number,age:r.age,year:r.school_year,la:r.local_authority,lic:r.licence_number,selected:false}));
+      }
+      // Load time entries
+      const castIds=S.children.map(c=>c.id);
+      if(castIds.length){
+        const idList='('+castIds.map(id=>'"'+id+'"').join(',')+')';
+        const dbEntries=await sbSelect('time_entries','cast_member_id=in.'+idList+'&order=ts.asc');
+        if(dbEntries)S.entries=dbEntries.map(r=>({id:r.id,childId:r.cast_member_id,type:r.type,timeStr:r.time_str,ts:r.ts,note:r.note}));
+        const dbBreaks=await sbSelect('breaks','cast_member_id=in.'+idList+'&order=created_at.asc');
+        if(dbBreaks)S.breaks=dbBreaks.map(r=>({id:r.id,childId:r.cast_member_id,start:r.break_start,end:r.break_end,type:r.type,notes:r.notes}));
+        const dbNw=await sbSelect('non_working','cast_member_id=in.'+idList+'&order=created_at.asc');
+        if(dbNw)S.nonWorking=dbNw.map(r=>({id:r.id,childId:r.cast_member_id,start:r.nw_start,end:r.nw_end,type:r.type,note:r.note,date:r.date}));
+        const dbEdu=await sbSelect('education_sessions','cast_member_id=in.'+idList+'&order=created_at.asc');
+        if(dbEdu)S.eduSessions=dbEdu.map(r=>({id:r.id,childId:r.cast_member_id,date:r.session_date,start:r.edu_start,end:r.edu_end,type:r.session_type,subjects:r.subjects,tutor:r.tutor,notes:r.notes,counted:r.counted}));
+        const dbCom=await sbSelect('comments','cast_member_id=in.'+idList+'&order=created_at.asc');
+        if(dbCom)S.comments=dbCom.map(r=>({id:r.id,childId:r.cast_member_id,type:r.category,text:r.note,time:r.time_str}));
+      }
+      // Save merged state to localStorage
+      localStorage.setItem('nst_v4',JSON.stringify(S));
+    }
+    hideSyncStatus();
+    flushQueue();
+    refresh();
+  }catch(e){
+    console.warn('Supabase load failed, using local data:',e);
+    hideSyncStatus();
+    showNotif('Using locally saved data','warn');
+  }
+}
+function showSyncStatus(msg){
+  const el=document.getElementById('saveInd');if(el){el.textContent=msg;el.classList.add('show')}
+}
+function hideSyncStatus(){
+  const el=document.getElementById('saveInd');if(el){el.textContent='Saved ✓';setTimeout(()=>el.classList.remove('show'),1000)}
+}
+function refresh(){
+  renderCastList();updateHome();
+  if(currentPage==='hours'){renderHoursCast();renderTimeLog();renderBreakLog();renderNwLog()}
+  if(currentPage==='cast')renderCastList();
+  if(currentPage==='education'){renderEduLog();renderEduCompliance()}
+  if(currentPage==='comments')renderComments();
+  if(currentPage==='alerts')renderAlerts();
+}
 
 // ══ UTILS ══
 function v(id){const el=document.getElementById(id);return el?el.value.trim():''}
@@ -704,33 +831,42 @@ function setEventMode(mode){
 }
 
 // ══ CAST ══
-function addChild(){
+async function addChild(){
   const name=v('newName');if(!name){showNotif('Enter a first name','warn');return}
-  const castNum=v('newCastNum');
-  S.children.push({id:uid(),name,castNum,age:v('newAge'),year:v('newYear'),la:v('newLA'),lic:v('newLicence'),selected:false});
+  if(!productionId){showNotif('Save production details first','warn');return}
+  const castNum=v('newCastNum'),age=v('newAge'),year=v('newYear'),la=v('newLA'),lic=v('newLicence');
+  const row={production_id:productionId,first_name:name,cast_number:castNum,age:age?parseInt(age):null,school_year:year,local_authority:la,licence_number:lic};
+  const res=await sbInsert('cast_members',row);
+  const newId=res&&res[0]?res[0].id:uid();
+  S.children.push({id:newId,name,castNum,age,year,la,lic,selected:false});
   sv('newName','');sv('newCastNum','');sv('newAge','');sv('newLA','');sv('newLicence','');
-  saveState();renderCastList();updateHome();showNotif(name+' added','ok');
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderCastList();updateHome();showNotif(name+' added','ok');
 }
-function removeChild(){
+async function removeChild(){
   if(!editingId||!confirm('Remove this child?'))return;
   const id=editingId;
+  await sbDelete('cast_members',id);
   S.children=S.children.filter(c=>c.id!==id);
   S.entries=S.entries.filter(e=>e.childId!==id);
-  S.breaks=S.breaks.filter(b=>b.childId!==id);
+  S.breaks=(S.breaks||[]).filter(b=>b.childId!==id);
   S.comments=S.comments.filter(cm=>cm.childId!==id);
   S.eduSessions=(S.eduSessions||[]).filter(es=>es.childId!==id);
   S.nonWorking=(S.nonWorking||[]).filter(nw=>nw.childId!==id);
-  closeEditModal();saveState();renderCastList();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  closeEditModal();renderCastList();
 }
 function openEditModal(id){
   editingId=id;const c=S.children.find(x=>x.id===id);if(!c)return;
   sv('em_name',c.name);sv('em_castnum',c.castNum||'');sv('em_age',c.age||'');sv('em_year',c.year||'');sv('em_la',c.la||'');sv('em_lic',c.lic||'');
   document.getElementById('editModal').classList.add('open');
 }
-function saveEditModal(){
+async function saveEditModal(){
   const c=S.children.find(x=>x.id===editingId);if(!c)return;
   c.name=v('em_name')||c.name;c.castNum=v('em_castnum');c.age=v('em_age');c.year=v('em_year');c.la=v('em_la');c.lic=v('em_lic');
-  closeEditModal();saveState();renderCastList();renderHoursCast();
+  await sbUpdate('cast_members',c.id,{first_name:c.name,cast_number:c.castNum,age:c.age?parseInt(c.age):null,school_year:c.year,local_authority:c.la,licence_number:c.lic});
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  closeEditModal();renderCastList();renderHoursCast();showNotif('Details updated','ok');
 }
 function closeEditModal(){document.getElementById('editModal').classList.remove('open');editingId=null}
 
@@ -838,50 +974,84 @@ function selectAll(){S.children.forEach(c=>c.selected=true);renderHoursCast()}
 function clearSel(){S.children.forEach(c=>c.selected=false);renderHoursCast()}
 
 // ══ LOGGING ══
-function logStepOn(){
+async function logStepOn(){
   const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
   const tStr=v('stepOnTime')||tsNow(),note=v('stepNote');let n=0;
-  sel.forEach(c=>{if(isOnSet(c.id)){showNotif(c.name+' already on set','warn');return}S.entries.push({id:uid(),childId:c.id,type:'on',timeStr:tStr,ts:makeTs(tStr),note});n++});
+  for(const c of sel){
+    if(isOnSet(c.id)){showNotif(c.name+' already on set','warn');continue}
+    const row={cast_member_id:c.id,type:'on',time_str:tStr,ts:makeTs(tStr),note};
+    const res=await sbInsert('time_entries',row);
+    const newId=res&&res[0]?res[0].id:uid();
+    S.entries.push({id:newId,childId:c.id,type:'on',timeStr:tStr,ts:makeTs(tStr),note});n++;
+  }
   if(n){showNotif('Stepped on: '+n,'ok');sv('stepNote','');}
-  saveState();renderHoursCast();renderTimeLog();checkAlerts();updateHome();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderTimeLog();updateHome();
 }
-function logStepOff(){
+async function logStepOff(){
   const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
   const tStr=v('stepOffTime')||tsNow(),note=v('stepNote');let n=0;
-  sel.forEach(c=>{if(!isOnSet(c.id)){showNotif(c.name+' not on set','warn');return}S.entries.push({id:uid(),childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note});n++});
+  for(const c of sel){
+    if(!isOnSet(c.id)){showNotif(c.name+' not on set','warn');continue}
+    const row={cast_member_id:c.id,type:'off',time_str:tStr,ts:makeTs(tStr),note};
+    const res=await sbInsert('time_entries',row);
+    const newId=res&&res[0]?res[0].id:uid();
+    S.entries.push({id:newId,childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note});n++;
+  }
   if(n){showNotif('Stepped off: '+n,'ok');sv('stepNote','');}
-  saveState();renderHoursCast();renderTimeLog();checkAlerts();updateHome();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderTimeLog();updateHome();
 }
-function logBreakStart(){
+async function logBreakStart(){
   const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
   const tStr=v('breakStart')||tsNow(),type=v('breakType')||'rest';let n=0;
-  sel.forEach(c=>{
-    S.breaks=(S.breaks||[]);S.breaks.push({id:uid(),childId:c.id,start:tStr,end:null,type,notes:''});
-    if(isOnSet(c.id))S.entries.push({id:uid(),childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note:'Break'});n++;
-  });
+  for(const c of sel){
+    const bRow={cast_member_id:c.id,break_start:tStr,break_end:null,type,notes:''};
+    const bRes=await sbInsert('breaks',bRow);
+    const bId=bRes&&bRes[0]?bRes[0].id:uid();
+    S.breaks=(S.breaks||[]);S.breaks.push({id:bId,childId:c.id,start:tStr,end:null,type,notes:''});
+    if(isOnSet(c.id)){
+      const eRow={cast_member_id:c.id,type:'off',time_str:tStr,ts:makeTs(tStr),note:'Break'};
+      const eRes=await sbInsert('time_entries',eRow);
+      const eId=eRes&&eRes[0]?eRes[0].id:uid();
+      S.entries.push({id:eId,childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note:'Break'});
+    }
+    n++;
+  }
   if(n)showNotif('Break started: '+n,'ok');
-  saveState();renderHoursCast();renderBreakLog();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderBreakLog();
 }
-function logBreakEnd(){
+async function logBreakEnd(){
   const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
   const tStr=v('breakEnd')||tsNow();let n=0;
-  sel.forEach(c=>{
+  for(const c of sel){
     const ob=(S.breaks||[]).filter(b=>b.childId===c.id&&!b.end).sort((a,b2)=>b2.start.localeCompare(a.start))[0];
-    if(ob){ob.end=tStr;n++}
-    S.entries.push({id:uid(),childId:c.id,type:'on',timeStr:tStr,ts:makeTs(tStr),note:'Return from break'});
-  });
+    if(ob){ob.end=tStr;await sbUpdate('breaks',ob.id,{break_end:tStr});n++}
+    const eRow={cast_member_id:c.id,type:'on',time_str:tStr,ts:makeTs(tStr),note:'Return from break'};
+    const eRes=await sbInsert('time_entries',eRow);
+    const eId=eRes&&eRes[0]?eRes[0].id:uid();
+    S.entries.push({id:eId,childId:c.id,type:'on',timeStr:tStr,ts:makeTs(tStr),note:'Return from break'});
+  }
   if(n)showNotif('Break ended: '+n,'ok');
-  saveState();renderHoursCast();renderBreakLog();renderTimeLog();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderBreakLog();renderTimeLog();
 }
-function logNonWorking(){
+async function logNonWorking(){
   const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
   const start=v('nwStart')||tsNow(),end=v('nwEnd'),type=v('nwType'),note=v('nwNote');
   if(!start){showNotif('Enter start time','warn');return}
   let n=0;
   S.nonWorking=(S.nonWorking||[]);
-  sel.forEach(c=>{S.nonWorking.push({id:uid(),childId:c.id,start,end:end||null,type,note,date:todayStr()});n++});
+  for(const c of sel){
+    const row={cast_member_id:c.id,nw_start:start,nw_end:end||null,type,note,date:todayStr()};
+    const res=await sbInsert('non_working',row);
+    const newId=res&&res[0]?res[0].id:uid();
+    S.nonWorking.push({id:newId,childId:c.id,start,end:end||null,type,note,date:todayStr()});n++;
+  }
   if(n)showNotif('Non-working logged: '+n,'ok');
-  saveState();renderNwLog();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderNwLog();
 }
 
 // ══ TIME LOG ══
@@ -954,7 +1124,11 @@ function renderNwLog(){
     </div>`;
   });
 }
-function deleteNw(id){S.nonWorking=(S.nonWorking||[]).filter(nw=>nw.id!==id);saveState();renderNwLog()}
+async function deleteNw(id){
+  await sbDelete('non_working',id);
+  S.nonWorking=(S.nonWorking||[]).filter(nw=>nw.id!==id);
+  localStorage.setItem('nst_v4',JSON.stringify(S));renderNwLog();
+}
 
 // ══ BREAK MODAL ══
 function openAddBreakModal(){
@@ -963,11 +1137,21 @@ function openAddBreakModal(){
   const t=tsNow();sv('bm_start',t);sv('bm_end',t);document.getElementById('breakModal').classList.add('open');
 }
 function closeBreakModal(){document.getElementById('breakModal').classList.remove('open')}
-function saveBreakModal(){
-  const cid=parseFloat(v('bm_child'));if(!cid){showNotif('Select a child','warn');return}
+async function saveBreakModal(){
+  const cid=v('bm_child');if(!cid){showNotif('Select a child','warn');return}
   const start=v('bm_start'),end=v('bm_end');if(!start){showNotif('Enter times','warn');return}
-  S.breaks=(S.breaks||[]);S.breaks.push({id:uid(),childId:cid,start,end:end||null,type:v('bm_type'),notes:v('bm_notes')});
-  closeBreakModal();saveState();renderBreakLog();renderHoursCast();showNotif('Break saved','ok');
+  const row={cast_member_id:cid,break_start:start,break_end:end||null,type:v('bm_type'),notes:v('bm_notes')};
+  const res=await sbInsert('breaks',row);
+  const newId=res&&res[0]?res[0].id:uid();
+  S.breaks=(S.breaks||[]);S.breaks.push({id:newId,childId:cid,start,end:end||null,type:v('bm_type'),notes:v('bm_notes')});
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  closeBreakModal();renderBreakLog();renderHoursCast();showNotif('Break saved','ok');
+}
+async function deleteBreak(id){
+  await sbDelete('breaks',id);
+  S.breaks=(S.breaks||[]).filter(b=>b.id!==id);
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderBreakLog();renderHoursCast();
 }
 
 // ══ EDUCATION ══
@@ -979,15 +1163,18 @@ function updateEduChildSelect(){
     if(cur)sel.value=cur;
   });
 }
-function logEduSession(){
-  const cid=parseFloat(v('eduChild'));if(!cid){showNotif('Select a child','warn');return}
+async function logEduSession(){
+  const cid=v('eduChild');if(!cid){showNotif('Select a child','warn');return}
   const start=v('eduStart'),end=v('eduEnd'),date=v('eduDate')||todayStr();
   if(!start||!end){showNotif('Enter start and end time','warn');return}
   const dur=minDiff(start,end);if(dur<1){showNotif('End must be after start','warn');return}
   S.eduSessions=S.eduSessions||[];
-  S.eduSessions.push({id:uid(),childId:cid,start,end,date,type:v('eduType')||'tutoring',subjects:v('eduSubjects'),tutor:v('eduTutor'),notes:v('eduNotes'),counted:dur>=30});
+  const row={cast_member_id:cid,session_date:date,edu_start:start,edu_end:end,session_type:v('eduType')||'tutoring',subjects:v('eduSubjects'),tutor:v('eduTutor'),notes:v('eduNotes'),counted:dur>=30};
+  const res=await sbInsert('education_sessions',row);
+  const newId=res&&res[0]?res[0].id:uid();
+  S.eduSessions.push({id:newId,childId:cid,start,end,date,type:v('eduType')||'tutoring',subjects:v('eduSubjects'),tutor:v('eduTutor'),notes:v('eduNotes'),counted:dur>=30});
   sv('eduSubjects','');sv('eduNotes','');
-  saveState();renderEduLog();renderEduCompliance();
+  localStorage.setItem('nst_v4',JSON.stringify(S));renderEduLog();renderEduCompliance();
   showNotif(dur>=30?'Session saved ('+fmtMins(dur)+')':'Saved — under 30 min, not counted',dur>=30?'ok':'warn');
 }
 function renderEduCompliance(){
@@ -1049,18 +1236,22 @@ function openEduEdit(id){
   sv('ee_type',es.type||'tutoring');sv('ee_subjects',es.subjects||'');sv('ee_tutor',es.tutor||'');sv('ee_notes',es.notes||'');
   document.getElementById('eduEditModal').classList.add('open');
 }
-function saveEduEdit(){
+async function saveEduEdit(){
   const es=(S.eduSessions||[]).find(x=>x.id===editingEduId);if(!es)return;
-  const cid=parseFloat(v('ee_child'));if(cid)es.childId=cid;
+  const cid=v('ee_child');if(cid)es.childId=cid;
   es.start=v('ee_start');es.end=v('ee_end');es.date=v('ee_date')||es.date;
   es.type=v('ee_type');es.subjects=v('ee_subjects');es.tutor=v('ee_tutor');es.notes=v('ee_notes');
   es.counted=minDiff(es.start,es.end)>=30;
-  closeEduEdit();saveState();renderEduLog();renderEduCompliance();showNotif('Session updated','ok');
+  await sbUpdate('education_sessions',es.id,{cast_member_id:es.childId,session_date:es.date,edu_start:es.start,edu_end:es.end,session_type:es.type,subjects:es.subjects,tutor:es.tutor,notes:es.notes,counted:es.counted});
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  closeEduEdit();renderEduLog();renderEduCompliance();showNotif('Session updated','ok');
 }
-function deleteEduSession(){
+async function deleteEduSession(){
   if(!editingEduId||!confirm('Delete this education session?'))return;
+  await sbDelete('education_sessions',editingEduId);
   S.eduSessions=(S.eduSessions||[]).filter(es=>es.id!==editingEduId);
-  closeEduEdit();saveState();renderEduLog();renderEduCompliance();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  closeEduEdit();renderEduLog();renderEduCompliance();
 }
 function closeEduEdit(){document.getElementById('eduEditModal').classList.remove('open');editingEduId=null}
 
@@ -1070,11 +1261,14 @@ function updateCommentSelect(){
   const cur=sel.value;sel.innerHTML='<option value="">Select child...</option>';
   S.children.forEach(c=>sel.innerHTML+=`<option value="${c.id}">${childLabel(c)}</option>`);if(cur)sel.value=cur;
 }
-function addComment(){
-  const cid=parseFloat(v('commentChild'));if(!cid){showNotif('Select a child','warn');return}
+async function addComment(){
+  const cid=v('commentChild');if(!cid){showNotif('Select a child','warn');return}
   const text=v('commentText');if(!text){showNotif('Enter a note','warn');return}
-  S.comments.push({id:uid(),childId:cid,type:v('commentType')||'general',text,time:v('commentTime')||tsNow(),created:new Date().toISOString()});
-  sv('commentText','');saveState();renderComments();showNotif('Note saved','ok');
+  const row={cast_member_id:cid,category:v('commentType')||'general',note:text,time_str:v('commentTime')||tsNow()};
+  const res=await sbInsert('comments',row);
+  const newId=res&&res[0]?res[0].id:uid();
+  S.comments.push({id:newId,childId:cid,type:v('commentType')||'general',text,time:v('commentTime')||tsNow()});
+  sv('commentText','');localStorage.setItem('nst_v4',JSON.stringify(S));renderComments();showNotif('Note saved','ok');
 }
 function renderComments(){
   const el=document.getElementById('commentsList'),ne=document.getElementById('noComments');
@@ -1089,13 +1283,17 @@ function renderComments(){
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
         <span style="background:${t2.bg};color:${t2.col};font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px">${t2.label}</span>
         <span style="font-size:11px;color:var(--ink3)">${cm.time}</span>
-        <button onclick="deleteComment(${cm.id})" style="margin-left:auto;background:none;border:none;color:var(--ink3);font-size:15px;cursor:pointer;padding:0 2px">×</button>
+        <button onclick="deleteComment('${cm.id}')" style="margin-left:auto;background:none;border:none;color:var(--ink3);font-size:15px;cursor:pointer;padding:0 2px">×</button>
       </div>
       <div style="font-size:13px;color:var(--ink)">${cm.text}</div>
     </div>`}).join('')}</div>`;
   });
 }
-function deleteComment(id){S.comments=S.comments.filter(cm=>cm.id!==id);saveState();renderComments()}
+async function deleteComment(id){
+  await sbDelete('comments',id);
+  S.comments=S.comments.filter(cm=>cm.id!==id);
+  localStorage.setItem('nst_v4',JSON.stringify(S));renderComments();
+}
 
 // ══ ALERTS ══
 function getAlerts(){
@@ -1170,9 +1368,9 @@ function resetDay(){
   if(!confirm('Start a new day? Today\'s working data will be cleared. Cast and production details are kept.'))return;
   S.entries=[];S.breaks=[];S.nonWorking=[];S.eduSessions=[];S.comments=[];S.dayDone=false;
   S.children.forEach(c=>c.selected=false);
-  saveState();
+  localStorage.setItem('nst_v4',JSON.stringify(S));
   document.getElementById('wrapSummary').style.display='none';
-  const nd=new Date();sv('shootDate',nd.toISOString().slice(0,10));sv('wrapTime','');sv('wrapNotes','');
+  const nd2=new Date();sv('shootDate',nd2.toISOString().slice(0,10));sv('wrapTime','');sv('wrapNotes','');
   showNotif('New day started — cast & production retained','ok');goHome();
 }
 
@@ -1237,7 +1435,10 @@ function generateSpreadsheet(dayRecord){
   showNotif('Spreadsheet downloaded (CSV — open in Excel)','ok');
 }
 function exportJSON(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nst-child-hours.json';a.click()}
-function clearAllData(){if(!confirm('Clear ALL data including cast? This cannot be undone.'))return;localStorage.removeItem('nst_v4');location.reload()}
+function clearAllData(){
+  if(!confirm('Clear ALL local data? This removes the local cache. Supabase data is kept unless you delete it there.'))return;
+  localStorage.clear();location.reload();
+}
 
 // ══ PDF ══
 function generatePDF(){
@@ -1324,7 +1525,8 @@ function updateClock(){
 }
 
 // ══ INIT ══
-loadState();
+loadQueue();
+loadState(); // restore from localStorage first (instant UI)
 const nd=new Date();
 if(!S.shootDate){sv('shootDate',nd.toISOString().slice(0,10));S.shootDate=nd.toISOString().slice(0,10)}
 sv('eduDate',nd.toISOString().slice(0,10));
@@ -1332,6 +1534,8 @@ const hh=String(nd.getHours()).padStart(2,'0'),mm=String(nd.getMinutes()).padSta
 ['stepOnTime','stepOffTime','breakStart','breakEnd','commentTime','wrapTime','nwStart','nwEnd','eduStart','eduEnd'].forEach(id=>sv(id,tnow));
 document.getElementById('backBtn').style.display='none';
 updateClock();updateHome();renderCastList();
+// Then sync fresh data from Supabase
+loadFromSupabase();
 setInterval(()=>{
   updateClock();updateHome();
   if(currentPage==='hours'){renderHoursCast();renderTimeLog()}
