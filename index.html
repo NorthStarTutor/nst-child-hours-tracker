@@ -155,6 +155,24 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
 .edu-meta{font-size:11px;color:var(--ink3);margin-top:1px}
 .edu-subjects{font-size:12px;color:var(--ink2);margin-top:4px;font-style:italic}
 
+/* RADIO / SCOTLAND */
+.radio-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.radio-opt{display:flex;align-items:center;gap:7px;padding:10px 14px;border-radius:var(--radius-xs);border:1.5px solid var(--border2);background:var(--cream);cursor:pointer;font-size:14px;font-weight:600;color:var(--ink2);flex:1;min-width:130px}
+.radio-opt input[type=radio]{width:18px;height:18px;accent-color:var(--navy);flex-shrink:0;cursor:pointer}
+.radio-opt.scotland-opt.selected{border-color:#005eb8;background:#eef4fb;color:#005eb8}
+.radio-opt.england-opt.selected{border-color:var(--navy);background:#eef0fb;color:var(--navy)}
+.scot-badge{display:inline-block;background:#005eb8;color:white;font-size:9px;font-weight:700;padding:2px 6px;border-radius:20px;margin-left:4px;vertical-align:middle}
+
+/* DIALOG / POPUP */
+.dialog-overlay{display:none;position:fixed;inset:0;background:rgba(13,42,74,0.55);z-index:300;align-items:center;justify-content:center;padding:20px}
+.dialog-overlay.open{display:flex}
+.dialog-box{background:var(--white);border-radius:var(--radius);padding:22px;max-width:340px;width:100%;box-shadow:var(--shadow-lg);text-align:center}
+.dialog-icon{font-size:38px;margin-bottom:10px}
+.dialog-box h3{font-size:17px;font-weight:700;color:var(--navy);margin-bottom:8px}
+.dialog-box p{font-size:14px;color:var(--ink2);line-height:1.5;margin-bottom:16px}
+.dialog-btns{display:flex;gap:9px}
+.dialog-btns .btn{flex:1}
+
 /* LEG TABLE */
 .leg-table{width:100%;border-collapse:collapse;font-size:12px}
 .leg-table th{text-align:left;padding:6px 5px;color:var(--ink3);font-size:9px;text-transform:uppercase;font-weight:700;border-bottom:1px solid var(--border);line-height:1.3}
@@ -252,9 +270,30 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
     </div>
     <div class="field"><label>Local Authority</label><input type="text" id="newLA" placeholder="e.g. Leeds City Council" autocomplete="off"></div>
     <div class="field"><label>Licence number</label><input type="text" id="newLicence" placeholder="e.g. LIC-2024-00123" autocomplete="off"></div>
+    <div class="field">
+      <label>Legislation</label>
+      <div class="radio-row">
+        <label class="radio-opt england-opt selected" id="radioEnglandLabel">
+          <input type="radio" name="newLegislation" id="newLegEngland" value="england" checked onchange="updateLegislationStyle()">
+          🏴󠁧󠁢󠁥󠁮󠁧󠁿 England / Wales
+        </label>
+        <label class="radio-opt scotland-opt" id="radioScotlandLabel">
+          <input type="radio" name="newLegislation" id="newLegScotland" value="scotland" onchange="updateLegislationStyle()">
+          🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland
+        </label>
+      </div>
+    </div>
     <button class="btn btn-navy" onclick="addChild()">+ Add to cast</button>
   </div>
   <div class="sl">Cast roster <span id="castCount" style="font-weight:400;font-size:10px;color:var(--ink3)"></span></div>
+  <div class="card" style="padding:12px 14px;margin-bottom:10px;background:var(--green-bg);border-color:var(--green-border)">
+    <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.07em">✅ Mark who is working today</div>
+    <p style="font-size:12px;color:var(--ink2);margin-bottom:10px;line-height:1.4">Tap a child to toggle them on or off for today's shoot. Only children marked as working today will appear in the Hours recording section.</p>
+    <div style="display:flex;gap:7px">
+      <button class="btn btn-sm btn-outline" onclick="markAllWorking()" style="flex:1;font-size:13px;border-color:var(--green);color:var(--green)">All working</button>
+      <button class="btn btn-sm btn-outline" onclick="markNoneWorking()" style="flex:1;font-size:13px">None working</button>
+    </div>
+  </div>
   <div id="castList"></div>
   <div id="noCast" class="empty"><div class="empty-icon">🎭</div><p>No children added yet</p></div>
 </div>
@@ -330,6 +369,10 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
       <button class="btn btn-sm" onclick="clearAllData()" style="flex:1;font-size:13px;background:var(--red-bg);color:var(--red);border:1.5px solid var(--red-border)">Clear data</button>
     </div>
     <p style="font-size:11px;color:var(--ink3)">Data saves automatically to browser local storage after each action.</p>
+    <div style="margin-top:10px;padding:10px;background:var(--purple-bg);border-radius:8px;border:1px solid var(--purple-border)">
+      <p style="font-size:11px;color:var(--purple);font-weight:600;margin-bottom:4px">⚙️ One-time Supabase setup</p>
+      <p style="font-size:10px;color:var(--ink2);line-height:1.5">Run this SQL once in your Supabase SQL editor to add the Scotland field:<br><code style="font-size:10px;background:white;padding:2px 5px;border-radius:3px;display:block;margin-top:4px;word-break:break-all">alter table cast_members add column if not exists scotland boolean default false;</code></p>
+    </div>
   </div>
 </div>
 
@@ -366,6 +409,7 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
         <button class="btn btn-green" onclick="logStepOn()">▶ Step on</button>
         <button class="btn btn-red" onclick="logStepOff()">■ Step off</button>
       </div>
+      <button class="btn btn-outline" style="margin-top:7px;font-size:13px;padding:10px;border-color:var(--navy);color:var(--navy)" onclick="logWorkingTime()">📋 Log working time (start → end)</button>
     </div>
     <div class="card">
       <div class="card-title">Breaks</div>
@@ -374,13 +418,17 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
         <div class="field" style="margin:0"><label>Break end</label><input type="time" id="breakEnd"></div>
       </div>
       <div class="field" style="margin-bottom:9px"><label>Break type</label>
-        <select id="breakType"><option value="meal">Meal break (45 min)</option><option value="rest">Rest break (15 min)</option><option value="other">Other</option></select>
+        <select id="breakType"><option value="meal">Meal break (min. 45 min)</option><option value="rest">Rest break (min. 15 min)</option><option value="other">Other</option></select>
       </div>
       <div class="btn-row">
-        <button class="btn btn-amber" onclick="logBreakStart()">⏸ Start break</button>
-        <button class="btn btn-green" onclick="logBreakEnd()">▶ End break</button>
+        <button class="btn btn-amber" onclick="quickStartBreak('rest')" style="font-size:13px">⏸ Start rest break</button>
+        <button class="btn btn-amber" onclick="quickStartBreak('meal')" style="font-size:13px;background:#8B4513">🍽 Start meal break</button>
       </div>
-      <button class="btn btn-outline" style="margin-top:7px;font-size:13px;padding:10px" onclick="openAddBreakModal()">+ Add break manually</button>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-green" onclick="logBreakEnd()">▶ End break (now)</button>
+        <button class="btn btn-green" onclick="logBreakEndTime()" style="font-size:13px">▶ End break (set time)</button>
+      </div>
+      <button class="btn btn-outline" style="margin-top:7px;font-size:13px;padding:10px" onclick="openAddBreakModal()">+ Log break manually</button>
     </div>
   </div>
 
@@ -457,6 +505,15 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
   <div class="card">
     <div class="card-title">Compliance summary</div>
     <div id="eduCompliance"><p style="font-size:12px;color:var(--ink3)">Add children to see compliance</p></div>
+  </div>
+
+  <div class="card" style="border-color:var(--purple-border)">
+    <div class="card-title" style="color:var(--purple)">📋 Tuition report</div>
+    <p style="font-size:12px;color:var(--ink2);margin-bottom:11px;line-height:1.5">Generate a summary of today's tuition sessions for all cast — includes times, subjects, totals and compliance status. Send directly to <strong>mark@northstartuition.com</strong> or download as PDF.</p>
+    <div class="btn-row">
+      <button class="btn btn-purple" onclick="generateTuitionPDF()" style="font-size:13px">📄 Download PDF</button>
+      <button class="btn btn-outline" onclick="emailTuitionReport()" style="font-size:13px;border-color:var(--purple);color:var(--purple)">✉️ Email report</button>
+    </div>
   </div>
 
   <div class="sl">Education session log</div>
@@ -559,11 +616,37 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
     </div>
     <div class="field"><label>Local Authority</label><input type="text" id="em_la"></div>
     <div class="field"><label>Licence number</label><input type="text" id="em_lic"></div>
+    <div class="field">
+      <label>Legislation</label>
+      <div class="radio-row">
+        <label class="radio-opt england-opt" id="emRadioEnglandLabel">
+          <input type="radio" name="emLegislation" id="em_leg_england" value="england" onchange="updateEmLegStyle()">
+          🏴󠁧󠁢󠁥󠁮󠁧󠁿 England / Wales
+        </label>
+        <label class="radio-opt scotland-opt" id="emRadioScotlandLabel">
+          <input type="radio" name="emLegislation" id="em_leg_scotland" value="scotland" onchange="updateEmLegStyle()">
+          🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland
+        </label>
+      </div>
+    </div>
     <div class="btn-row">
       <button class="btn btn-navy" onclick="saveEditModal()">Save</button>
       <button class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
     </div>
     <button class="btn" onclick="removeChild()" style="margin-top:7px;background:var(--red-bg);color:var(--red);border:1.5px solid var(--red-border)">Remove from cast</button>
+  </div>
+</div>
+
+<!-- BREAK DURATION WARNING DIALOG -->
+<div class="dialog-overlay" id="breakWarnDialog">
+  <div class="dialog-box">
+    <div class="dialog-icon" id="breakWarnIcon">⚠️</div>
+    <h3 id="breakWarnTitle">Break too short</h3>
+    <p id="breakWarnMsg">Rest breaks must be a minimum of 15 minutes.</p>
+    <div class="dialog-btns">
+      <button class="btn btn-outline" onclick="closeBreakWarn()">Cancel</button>
+      <button class="btn btn-amber" id="breakWarnForce" onclick="forceLogBreak()">Log anyway</button>
+    </div>
   </div>
 </div>
 
@@ -595,19 +678,29 @@ body{font-family:-apple-system,'SF Pro Text','Segoe UI',Arial,sans-serif;font-si
 <div class="notif-area" id="notifArea"></div>
 
 <script>
-// ══ LIMITS (from image: 0-4, 5-8, 9-16) ══
+// ══ LIMITS ══
+// England/Wales (from regulations image)
 const LIMITS={
   under5:{maxDay:300,maxPerf:120,contWork:30,minEdu:0,label:'0–4'},
   age5to8:{maxDay:480,maxPerf:180,contWork:150,minEdu:180,label:'5–8'},
   age9to16:{maxDay:570,maxPerf:300,contWork:150,minEdu:180,label:'9–16'},
   age16plus:{maxDay:600,maxPerf:300,contWork:150,minEdu:0,label:'17+'}
 };
-function getLim(age){
+// Scotland — Civic Government (Scotland) Act 1982 / Education (Scotland) Act
+const LIMITS_SCO={
+  under5:{maxDay:300,maxPerf:120,contWork:30,minEdu:0,label:'0–4 (Scot)'},
+  age5to8:{maxDay:480,maxPerf:180,contWork:150,minEdu:180,label:'5–8 (Scot)'},
+  age9to16:{maxDay:570,maxPerf:300,contWork:150,minEdu:180,label:'9–16 (Scot)'},
+  age16plus:{maxDay:600,maxPerf:300,contWork:150,minEdu:0,label:'17+ (Scot)'}
+};
+function getLim(age,scotland){
+  // Scotland uses same hour limits but separate licensing authority
+  const tbl=scotland?LIMITS_SCO:LIMITS;
   age=parseInt(age);
-  if(isNaN(age)||age<5)return LIMITS.under5;
-  if(age<=8)return LIMITS.age5to8;
-  if(age<=16)return LIMITS.age9to16;
-  return LIMITS.age16plus;
+  if(isNaN(age)||age<5)return tbl.under5;
+  if(age<=8)return tbl.age5to8;
+  if(age<=16)return tbl.age9to16;
+  return tbl.age16plus;
 }
 
 // ══ SUPABASE CONFIG ══
@@ -715,10 +808,18 @@ async function loadFromSupabase(){
 
     if(cachedProdId){
       productionId=cachedProdId;
-      // Load cast
+      // Load cast — preserve workingToday and selected flags from local cache
       const dbCast=await sbSelect('cast_members','production_id=eq.'+productionId+'&order=created_at.asc');
       if(dbCast&&dbCast.length){
-        S.children=dbCast.map(r=>({id:r.id,name:r.first_name,castNum:r.cast_number,age:r.age,year:r.school_year,la:r.local_authority,lic:r.licence_number,selected:false}));
+        const localById={};(S.children||[]).forEach(c=>{localById[c.id]=c});
+        S.children=dbCast.map(r=>({
+          id:r.id,name:r.first_name,castNum:r.cast_number,age:r.age,
+          year:r.school_year,la:r.local_authority,lic:r.licence_number,
+          scotland:r.scotland||false,
+          // Preserve today's selection state from local cache
+          workingToday:localById[r.id]?!!localById[r.id].workingToday:false,
+          selected:false
+        }));
       }
       // Load time entries
       const castIds=S.children.map(c=>c.id);
@@ -831,17 +932,31 @@ function setEventMode(mode){
 }
 
 // ══ CAST ══
+function updateLegislationStyle(){
+  const scot=document.getElementById('newLegScotland')&&document.getElementById('newLegScotland').checked;
+  const el=document.getElementById('radioEnglandLabel'),es=document.getElementById('radioScotlandLabel');
+  if(el)el.classList.toggle('selected',!scot);
+  if(es)es.classList.toggle('selected',!!scot);
+}
+function updateEmLegStyle(){
+  const scot=document.getElementById('em_leg_scotland')&&document.getElementById('em_leg_scotland').checked;
+  const el=document.getElementById('emRadioEnglandLabel'),es=document.getElementById('emRadioScotlandLabel');
+  if(el)el.classList.toggle('selected',!scot);
+  if(es)es.classList.toggle('selected',!!scot);
+}
 async function addChild(){
   const name=v('newName');if(!name){showNotif('Enter a first name','warn');return}
   if(!productionId){showNotif('Save production details first','warn');return}
   const castNum=v('newCastNum'),age=v('newAge'),year=v('newYear'),la=v('newLA'),lic=v('newLicence');
-  const row={production_id:productionId,first_name:name,cast_number:castNum,age:age?parseInt(age):null,school_year:year,local_authority:la,licence_number:lic};
+  const scotland=document.getElementById('newLegScotland')&&document.getElementById('newLegScotland').checked;
+  const row={production_id:productionId,first_name:name,cast_number:castNum,age:age?parseInt(age):null,school_year:year,local_authority:la,licence_number:lic,scotland:!!scotland};
   const res=await sbInsert('cast_members',row);
   const newId=res&&res[0]?res[0].id:uid();
-  S.children.push({id:newId,name,castNum,age,year,la,lic,selected:false});
+  S.children.push({id:newId,name,castNum,age,year,la,lic,scotland:!!scotland,selected:false});
   sv('newName','');sv('newCastNum','');sv('newAge','');sv('newLA','');sv('newLicence','');
+  if(document.getElementById('newLegEngland')){document.getElementById('newLegEngland').checked=true;updateLegislationStyle();}
   localStorage.setItem('nst_v4',JSON.stringify(S));
-  renderCastList();updateHome();showNotif(name+' added','ok');
+  renderCastList();updateHome();showNotif(name+(scotland?' 🏴󠁧󠁢󠁳󠁣󠁴󠁿':'')+' added','ok');
 }
 async function removeChild(){
   if(!editingId||!confirm('Remove this child?'))return;
@@ -859,12 +974,17 @@ async function removeChild(){
 function openEditModal(id){
   editingId=id;const c=S.children.find(x=>x.id===id);if(!c)return;
   sv('em_name',c.name);sv('em_castnum',c.castNum||'');sv('em_age',c.age||'');sv('em_year',c.year||'');sv('em_la',c.la||'');sv('em_lic',c.lic||'');
+  const scot=!!c.scotland;
+  const engEl=document.getElementById('em_leg_england'),scoEl=document.getElementById('em_leg_scotland');
+  if(engEl)engEl.checked=!scot;if(scoEl)scoEl.checked=scot;
+  updateEmLegStyle();
   document.getElementById('editModal').classList.add('open');
 }
 async function saveEditModal(){
   const c=S.children.find(x=>x.id===editingId);if(!c)return;
   c.name=v('em_name')||c.name;c.castNum=v('em_castnum');c.age=v('em_age');c.year=v('em_year');c.la=v('em_la');c.lic=v('em_lic');
-  await sbUpdate('cast_members',c.id,{first_name:c.name,cast_number:c.castNum,age:c.age?parseInt(c.age):null,school_year:c.year,local_authority:c.la,licence_number:c.lic});
+  c.scotland=document.getElementById('em_leg_scotland')&&document.getElementById('em_leg_scotland').checked;
+  await sbUpdate('cast_members',c.id,{first_name:c.name,cast_number:c.castNum,age:c.age?parseInt(c.age):null,school_year:c.year,local_authority:c.la,licence_number:c.lic,scotland:!!c.scotland});
   localStorage.setItem('nst_v4',JSON.stringify(S));
   closeEditModal();renderCastList();renderHoursCast();showNotif('Details updated','ok');
 }
@@ -874,10 +994,21 @@ function closeEditModal(){document.getElementById('editModal').classList.remove(
 function isOnSet(id){const evts=S.entries.filter(e=>e.childId===id).sort((a,b)=>a.ts-b.ts);const l=evts[evts.length-1];return l&&l.type==='on'}
 function isOnBreak(id){return (S.breaks||[]).some(b=>b.childId===id&&!b.end)}
 function getTotalMins(id){
+  // Only count segments where THIS child was explicitly stepped on.
+  // Sort by timestamp ascending.
   const evts=S.entries.filter(e=>e.childId===id).sort((a,b)=>a.ts-b.ts);
   let t=0,on=null;
-  evts.forEach(e=>{if(e.type==='on'){on=e.ts}else if(e.type==='off'&&on!=null){t+=Math.round((e.ts-on)/60000);on=null}});
-  if(on!=null)t+=Math.round((Date.now()-on)/60000);
+  for(const e of evts){
+    if(e.type==='on'){
+      // Only start counting from their own step-on event
+      if(on===null)on=e.ts;
+    } else if(e.type==='off'&&on!==null){
+      t+=Math.round((e.ts-on)/60000);
+      on=null;
+    }
+  }
+  // If currently on set, add time since last step-on
+  if(on!==null)t+=Math.round((Date.now()-on)/60000);
   return Math.max(0,t);
 }
 function getCurrentSessionMins(id){
@@ -923,14 +1054,21 @@ function renderCastList(){
   if(cc)cc.textContent=S.children.length?'('+S.children.length+')':'';
   el.innerHTML='';if(!S.children.length){ne.style.display='';return}ne.style.display='none';
   S.children.forEach(c=>{
-    const tm=getTotalMins(c.id),lim=getLim(c.age),pct=Math.min(100,Math.round(tm/lim.maxDay*100));
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),pct=Math.min(100,Math.round(tm/lim.maxDay*100));
     const onSet=isOnSet(c.id),pfCls=pct>=100?'pf-red':pct>=80?'pf-amber':'pf-green';
     const dotCls=tm>=lim.maxDay?'dot-crit':pct>=80?'dot-warn':onSet?'dot-on':'dot-idle';
-    const div=document.createElement('div');div.className='cast-card';
+    const working=!!c.workingToday;
+    const div=document.createElement('div');
+    div.className='cast-card'+(working?' selected':'');
+    div.style.opacity=working?'1':'0.55';
+    div.onclick=()=>{c.workingToday=!c.workingToday;localStorage.setItem('nst_v4',JSON.stringify(S));renderCastList();};
     div.innerHTML=`<div class="cast-card-top">
+      <div class="cast-check" style="${working?'background:var(--green);border-color:var(--green)':''}">
+        <span class="cast-check-mark" style="${working?'display:block':'display:none'}">✓</span>
+      </div>
       <div class="cast-dot ${dotCls}"></div>
       <div class="cast-info">
-        <div class="cast-name">${childLabel(c)}${onSet?'<span class="cast-tag tag-on">ON SET</span>':''}</div>
+        <div class="cast-name">${childLabel(c)}${c.scotland?'<span class="scot-badge">🏴󠁧󠁢󠁳󠁣󠁴󠁿 SCO</span>':''}${onSet?'<span class="cast-tag tag-on">ON SET</span>':''}${working?'<span class="cast-tag tag-on" style="background:var(--green-bg);color:var(--green)">TODAY</span>':'<span class="cast-tag" style="background:var(--cream3);color:var(--ink3)">OFF</span>'}</div>
         <div class="cast-meta">${c.age?'Age '+c.age:''}${c.year?' · '+c.year:''}${c.la?' · '+c.la:''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:7px">
@@ -943,13 +1081,22 @@ function renderCastList(){
     el.appendChild(div);
   });
 }
+function markAllWorking(){S.children.forEach(c=>c.workingToday=true);localStorage.setItem('nst_v4',JSON.stringify(S));renderCastList();}
+function markNoneWorking(){S.children.forEach(c=>c.workingToday=false);localStorage.setItem('nst_v4',JSON.stringify(S));renderCastList();}
 
-// ══ HOURS PAGE CAST ══
+// ══ HOURS PAGE CAST — only shows children marked working today ══
 function renderHoursCast(){
   const el=document.getElementById('hoursCastList'),ne=document.getElementById('noHoursCast');
-  el.innerHTML='';if(!S.children.length){ne.style.display='';return}ne.style.display='none';
-  S.children.forEach(c=>{
-    const tm=getTotalMins(c.id),lim=getLim(c.age),pct=Math.min(100,Math.round(tm/lim.maxDay*100));
+  el.innerHTML='';
+  const todaysCast=S.children.filter(c=>c.workingToday);
+  if(!todaysCast.length){
+    ne.style.display='';
+    ne.innerHTML='<p style="font-size:13px;color:var(--ink3);text-align:center;padding:12px 0">No cast marked as working today.<br>Go to <strong>Cast</strong> and tap each child who is on set today.</p>';
+    return;
+  }
+  ne.style.display='none';
+  todaysCast.forEach(c=>{
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),pct=Math.min(100,Math.round(tm/lim.maxDay*100));
     const onSet=isOnSet(c.id),onBreak=isOnBreak(c.id);
     const dotCls=tm>=lim.maxDay?'dot-crit':pct>=80?'dot-warn':onSet?'dot-on':'dot-idle';
     const pfCls=pct>=100?'pf-red':pct>=80?'pf-amber':'pf-green';
@@ -961,7 +1108,7 @@ function renderHoursCast(){
       <div class="cast-check"><span class="cast-check-mark">✓</span></div>
       <div class="cast-dot ${dotCls}"></div>
       <div class="cast-info">
-        <div class="cast-name">${childLabel(c)}${tagHtml}</div>
+        <div class="cast-name">${childLabel(c)}${c.scotland?'<span class="scot-badge">🏴󠁧󠁢󠁳󠁣󠁴󠁿 SCO</span>':''}${tagHtml}</div>
         <div class="cast-meta">${evtLabel}</div>
       </div>
       <span class="cast-time">${fmtMins(tm)}</span>
@@ -970,8 +1117,116 @@ function renderHoursCast(){
     el.appendChild(div);
   });
 }
-function selectAll(){S.children.forEach(c=>c.selected=true);renderHoursCast()}
+function selectAll(){S.children.filter(c=>c.workingToday).forEach(c=>c.selected=true);renderHoursCast()}
 function clearSel(){S.children.forEach(c=>c.selected=false);renderHoursCast()}
+
+// ══ BREAK WARNING DIALOG ══
+let pendingBreakData=null;
+function showBreakWarn(title,msg,onForce){
+  document.getElementById('breakWarnTitle').textContent=title;
+  document.getElementById('breakWarnMsg').textContent=msg;
+  pendingBreakData=onForce;
+  document.getElementById('breakWarnDialog').classList.add('open');
+}
+function closeBreakWarn(){document.getElementById('breakWarnDialog').classList.remove('open');pendingBreakData=null}
+function forceLogBreak(){closeBreakWarn();if(pendingBreakData)pendingBreakData();}
+
+// Quick start break NOW (uses current time)
+async function quickStartBreak(type){
+  const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
+  const tStr=tsNow();let n=0;
+  for(const c of sel){
+    const bRow={cast_member_id:c.id,break_start:tStr,break_end:null,type,notes:''};
+    const bRes=await sbInsert('breaks',bRow);
+    const bId=bRes&&bRes[0]?bRes[0].id:uid();
+    S.breaks=(S.breaks||[]);S.breaks.push({id:bId,childId:c.id,start:tStr,end:null,type,notes:''});
+    if(isOnSet(c.id)){
+      const eRow={cast_member_id:c.id,type:'off',time_str:tStr,ts:makeTs(tStr),note:type==='meal'?'Meal break':'Rest break'};
+      const eRes=await sbInsert('time_entries',eRow);
+      const eId=eRes&&eRes[0]?eRes[0].id:uid();
+      S.entries.push({id:eId,childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note:type==='meal'?'Meal break':'Rest break'});
+    }
+    n++;
+  }
+  if(n)showNotif((type==='meal'?'🍽 Meal':'⏸ Rest')+' break started at '+tStr+' · '+n+' child'+(n>1?'ren':''),'ok');
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderBreakLog();
+}
+
+// End break NOW (uses current time, no time picker needed)
+async function logBreakEnd(){
+  const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
+  const tStr=tsNow();
+  await _endBreaks(sel,tStr);
+}
+// End break using the time picker value
+async function logBreakEndTime(){
+  const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
+  const tStr=v('breakEnd')||tsNow();
+  await _endBreaks(sel,tStr);
+}
+async function _endBreaks(sel,tStr){
+  let n=0,warnMsg='';
+  for(const c of sel){
+    const ob=(S.breaks||[]).filter(b=>b.childId===c.id&&!b.end).sort((a,b2)=>b2.start.localeCompare(a.start))[0];
+    if(ob){
+      const dur=minDiff(ob.start,tStr);
+      const minRequired=ob.type==='meal'?45:ob.type==='rest'?15:0;
+      if(minRequired>0&&dur<minRequired){
+        // Build warning
+        const typeLabel=ob.type==='meal'?'Meal':'Rest';
+        const minLabel=ob.type==='meal'?'45':'15';
+        warnMsg=`${typeLabel} breaks must be a minimum of ${minLabel} minutes. This break is only ${dur} minute${dur===1?'':'s'}. Do you still want to log it?`;
+        // Capture for force-log
+        const capturedOb=ob,capturedC=c,capturedTStr=tStr;
+        showBreakWarn(
+          `${typeLabel} break too short`,
+          warnMsg,
+          async()=>{await _commitBreakEnd(capturedOb,capturedC,capturedTStr);}
+        );
+        return; // stop — user must confirm
+      }
+      await _commitBreakEnd(ob,c,tStr);n++;
+    }
+  }
+  if(n)showNotif('Break ended at '+tStr+' · '+n+' child'+(n>1?'ren':''),'ok');
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderBreakLog();renderTimeLog();
+}
+async function _commitBreakEnd(ob,c,tStr){
+  ob.end=tStr;
+  await sbUpdate('breaks',ob.id,{break_end:tStr});
+  const eRow={cast_member_id:c.id,type:'on',time_str:tStr,ts:makeTs(tStr),note:'Return from break'};
+  const eRes=await sbInsert('time_entries',eRow);
+  const eId=eRes&&eRes[0]?eRes[0].id:uid();
+  S.entries.push({id:eId,childId:c.id,type:'on',timeStr:tStr,ts:makeTs(tStr),note:'Return from break'});
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  showNotif('Break ended at '+tStr,'ok');
+  renderHoursCast();renderBreakLog();renderTimeLog();
+}
+
+// Log a complete working time block (on then off in one action)
+async function logWorkingTime(){
+  const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
+  const onTime=v('stepOnTime'),offTime=v('stepOffTime');
+  if(!onTime||!offTime){showNotif('Set both step on and step off times','warn');return}
+  if(minDiff(onTime,offTime)<=0){showNotif('Step off must be after step on','warn');return}
+  let n=0;
+  for(const c of sel){
+    const onRow={cast_member_id:c.id,type:'on',time_str:onTime,ts:makeTs(onTime),note:v('stepNote')||'Working time'};
+    const onRes=await sbInsert('time_entries',onRow);
+    const onId=onRes&&onRes[0]?onRes[0].id:uid();
+    S.entries.push({id:onId,childId:c.id,type:'on',timeStr:onTime,ts:makeTs(onTime),note:v('stepNote')||'Working time'});
+    const offRow={cast_member_id:c.id,type:'off',time_str:offTime,ts:makeTs(offTime),note:v('stepNote')||'Working time'};
+    const offRes=await sbInsert('time_entries',offRow);
+    const offId=offRes&&offRes[0]?offRes[0].id:uid();
+    S.entries.push({id:offId,childId:c.id,type:'off',timeStr:offTime,ts:makeTs(offTime),note:v('stepNote')||'Working time'});
+    n++;
+  }
+  if(n){showNotif('Working time logged: '+onTime+'–'+offTime+' · '+n+' child'+(n>1?'ren':''),'ok');sv('stepNote','');}
+  localStorage.setItem('nst_v4',JSON.stringify(S));
+  renderHoursCast();renderTimeLog();updateHome();
+}
 
 // ══ LOGGING ══
 async function logStepOn(){
@@ -1011,31 +1266,16 @@ async function logBreakStart(){
     const bId=bRes&&bRes[0]?bRes[0].id:uid();
     S.breaks=(S.breaks||[]);S.breaks.push({id:bId,childId:c.id,start:tStr,end:null,type,notes:''});
     if(isOnSet(c.id)){
-      const eRow={cast_member_id:c.id,type:'off',time_str:tStr,ts:makeTs(tStr),note:'Break'};
+      const eRow={cast_member_id:c.id,type:'off',time_str:tStr,ts:makeTs(tStr),note:type==='meal'?'Meal break':'Break'};
       const eRes=await sbInsert('time_entries',eRow);
       const eId=eRes&&eRes[0]?eRes[0].id:uid();
-      S.entries.push({id:eId,childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note:'Break'});
+      S.entries.push({id:eId,childId:c.id,type:'off',timeStr:tStr,ts:makeTs(tStr),note:type==='meal'?'Meal break':'Break'});
     }
     n++;
   }
   if(n)showNotif('Break started: '+n,'ok');
   localStorage.setItem('nst_v4',JSON.stringify(S));
   renderHoursCast();renderBreakLog();
-}
-async function logBreakEnd(){
-  const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
-  const tStr=v('breakEnd')||tsNow();let n=0;
-  for(const c of sel){
-    const ob=(S.breaks||[]).filter(b=>b.childId===c.id&&!b.end).sort((a,b2)=>b2.start.localeCompare(a.start))[0];
-    if(ob){ob.end=tStr;await sbUpdate('breaks',ob.id,{break_end:tStr});n++}
-    const eRow={cast_member_id:c.id,type:'on',time_str:tStr,ts:makeTs(tStr),note:'Return from break'};
-    const eRes=await sbInsert('time_entries',eRow);
-    const eId=eRes&&eRes[0]?eRes[0].id:uid();
-    S.entries.push({id:eId,childId:c.id,type:'on',timeStr:tStr,ts:makeTs(tStr),note:'Return from break'});
-  }
-  if(n)showNotif('Break ended: '+n,'ok');
-  localStorage.setItem('nst_v4',JSON.stringify(S));
-  renderHoursCast();renderBreakLog();renderTimeLog();
 }
 async function logNonWorking(){
   const sel=getSelected();if(!sel.length){showNotif('Select at least one child','warn');return}
@@ -1060,7 +1300,7 @@ function renderTimeLog(){
   el.innerHTML='';let has=false;
   S.children.forEach(c=>{
     const evts=S.entries.filter(e=>e.childId===c.id).sort((a,b)=>a.ts-b.ts);if(!evts.length)return;has=true;
-    const tm=getTotalMins(c.id),lim=getLim(c.age),pct=Math.min(100,Math.round(tm/lim.maxDay*100));
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),pct=Math.min(100,Math.round(tm/lim.maxDay*100));
     const onSet=isOnSet(c.id),firstOn=evts.find(e=>e.type==='on'),sessMin=getCurrentSessionMins(c.id);
     const badge=tm>=lim.maxDay?'badge-red':pct>=80?'badge-amber':'badge-green';
     const evtLabel=getCurrentEventLabel(c.id);
@@ -1139,13 +1379,27 @@ function openAddBreakModal(){
 function closeBreakModal(){document.getElementById('breakModal').classList.remove('open')}
 async function saveBreakModal(){
   const cid=v('bm_child');if(!cid){showNotif('Select a child','warn');return}
-  const start=v('bm_start'),end=v('bm_end');if(!start){showNotif('Enter times','warn');return}
-  const row={cast_member_id:cid,break_start:start,break_end:end||null,type:v('bm_type'),notes:v('bm_notes')};
-  const res=await sbInsert('breaks',row);
-  const newId=res&&res[0]?res[0].id:uid();
-  S.breaks=(S.breaks||[]);S.breaks.push({id:newId,childId:cid,start,end:end||null,type:v('bm_type'),notes:v('bm_notes')});
-  localStorage.setItem('nst_v4',JSON.stringify(S));
-  closeBreakModal();renderBreakLog();renderHoursCast();showNotif('Break saved','ok');
+  const start=v('bm_start'),end=v('bm_end'),type=v('bm_type');
+  if(!start){showNotif('Enter times','warn');return}
+  const dur=end?minDiff(start,end):0;
+  const minReq=type==='meal'?45:type==='rest'?15:0;
+  const doSave=async()=>{
+    const row={cast_member_id:cid,break_start:start,break_end:end||null,type,notes:v('bm_notes')};
+    const res=await sbInsert('breaks',row);
+    const newId=res&&res[0]?res[0].id:uid();
+    S.breaks=(S.breaks||[]);
+    S.breaks.push({id:newId,childId:cid,start,end:end||null,type,notes:v('bm_notes')});
+    localStorage.setItem('nst_v4',JSON.stringify(S));
+    closeBreakModal();renderBreakLog();renderHoursCast();showNotif('Break saved','ok');
+  };
+  if(end&&minReq>0&&dur<minReq){
+    const lbl=type==='meal'?'Meal':'Rest',min=type==='meal'?'45':'15';
+    showBreakWarn(`${lbl} break too short`,
+      `${lbl} breaks must be a minimum of ${min} minutes. This is only ${dur} minute${dur===1?'':'s'}. Log it anyway?`,
+      doSave);
+  } else {
+    await doSave();
+  }
 }
 async function deleteBreak(id){
   await sbDelete('breaks',id);
@@ -1182,7 +1436,7 @@ function renderEduCompliance(){
   if(!S.children.length){el.innerHTML='<p style="font-size:12px;color:var(--ink3)">Add children first</p>';return}
   let html='';
   S.children.forEach(c=>{
-    const lim=getLim(c.age);
+    const lim=getLim(c.age,c.scotland);
     if(lim.minEdu===0){html+=`<div style="padding:7px 0;border-top:0.5px solid var(--border)"><span style="font-weight:700;color:var(--navy)">${childLabel(c)}</span> <span style="font-size:11px;color:var(--ink3)">Age 0–4 or 17+ — no education requirement</span></div>`;return}
     const todayMins=getEduTodayMins(c.id);
     const fwMins=getEdu4WeekMins(c.id);
@@ -1299,7 +1553,7 @@ async function deleteComment(id){
 function getAlerts(){
   const al=[];
   S.children.forEach(c=>{
-    const tm=getTotalMins(c.id),lim=getLim(c.age),onSet=isOnSet(c.id),sess=getCurrentSessionMins(c.id),left=lim.maxDay-tm,tillBreak=lim.contWork-sess;
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),onSet=isOnSet(c.id),sess=getCurrentSessionMins(c.id),left=lim.maxDay-tm,tillBreak=lim.contWork-sess;
     if(tm>=lim.maxDay)al.push({level:'crit',child:childLabel(c),msg:'Daily limit reached',detail:fmtMins(tm)+' worked — limit: '+fmtMins(lim.maxDay)});
     else if(left<=30&&left>0)al.push({level:'warn',child:childLabel(c),msg:fmtMins(left)+' until daily limit',detail:fmtMins(left)+' remaining of '+fmtMins(lim.maxDay)});
     if(onSet&&sess>=lim.contWork)al.push({level:'crit',child:childLabel(c),msg:'Break overdue',detail:'On set '+fmtMins(sess)+' — max continuous: '+fmtMins(lim.contWork)});
@@ -1350,7 +1604,7 @@ function buildWrapReport(wt){
   document.getElementById('wrapBannerLine').textContent=prod+(date?' · '+date:'')+(chap?' · Chaperone: '+chap:'');
   let html='<div class="card"><div class="card-title">Final summary</div>';
   S.children.forEach(c=>{
-    const tm=getTotalMins(c.id),lim=getLim(c.age),pct=Math.round(tm/lim.maxDay*100);
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),pct=Math.round(tm/lim.maxDay*100);
     const badge=tm>=lim.maxDay?'badge-red':pct>=90?'badge-amber':'badge-green';
     html+=`<div style="padding:8px 0;border-top:0.5px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
@@ -1363,15 +1617,36 @@ function buildWrapReport(wt){
   html+='</div>';document.getElementById('wrapReport').innerHTML=html;
 }
 
-// ══ RESET DAY (keep cast + production) ══
-function resetDay(){
-  if(!confirm('Start a new day? Today\'s working data will be cleared. Cast and production details are kept.'))return;
+// ══ RESET DAY (keep cast + production — clear only today's working data) ══
+async function resetDay(){
+  if(!confirm('Start a new day? All time logs, breaks, education and notes for today will be cleared. Your cast list and production details are kept.'))return;
+  // Clear daily working data from Supabase for each child
+  const castIds=S.children.map(c=>c.id);
+  if(castIds.length){
+    // We delete time entries, breaks, non-working and comments — not cast_members
+    for(const cid of castIds){
+      const entries=S.entries.filter(e=>e.childId===cid);
+      for(const e of entries) await sbDelete('time_entries',e.id);
+      const breaks=(S.breaks||[]).filter(b=>b.childId===cid);
+      for(const b of breaks) await sbDelete('breaks',b.id);
+      const nws=(S.nonWorking||[]).filter(nw=>nw.childId===cid);
+      for(const nw of nws) await sbDelete('non_working',nw.id);
+      const coms=S.comments.filter(cm=>cm.childId===cid);
+      for(const cm of coms) await sbDelete('comments',cm.id);
+      const edus=(S.eduSessions||[]).filter(es=>es.childId===cid);
+      for(const es of edus) await sbDelete('education_sessions',es.id);
+    }
+  }
+  // Clear in memory — cast stays, selection cleared
   S.entries=[];S.breaks=[];S.nonWorking=[];S.eduSessions=[];S.comments=[];S.dayDone=false;
-  S.children.forEach(c=>c.selected=false);
+  S.children.forEach(c=>{c.selected=false;c.workingToday=false;});
+  const nd2=new Date();
+  S.shootDate=nd2.toISOString().slice(0,10);
+  sv('shootDate',S.shootDate);sv('wrapTime','');sv('wrapNotes','');
   localStorage.setItem('nst_v4',JSON.stringify(S));
   document.getElementById('wrapSummary').style.display='none';
-  const nd2=new Date();sv('shootDate',nd2.toISOString().slice(0,10));sv('wrapTime','');sv('wrapNotes','');
-  showNotif('New day started — cast & production retained','ok');goHome();
+  showNotif('New day started — cast retained, select who is working today','ok');
+  goPage('cast');
 }
 
 // ══ SPREADSHEET EXPORT (CSV download — works offline, no library needed) ══
@@ -1387,7 +1662,7 @@ function generateSpreadsheet(dayRecord){
   lines.push(['HOURS SUMMARY']);
   lines.push(['Cast number','First name','Age','Year','Local Authority','Licence','Total worked (mins)','Total worked','Breaks','Break time (mins)','Education today (mins)','Education today','Limit (mins)','Limit','Status']);
   dayRecord.children.forEach(c=>{
-    const lim=getLim(c.age);
+    const lim=getLim(c.age,c.scotland);
     const pct=Math.round(c.totalMins/lim.maxDay*100);
     const status=c.totalMins>=lim.maxDay?'OVER LIMIT':pct>=90?'Near limit':'OK';
     lines.push([c.castNum||'',c.name,c.age||'',c.year||'',c.la||'',c.lic||'',c.totalMins,fmtMins(c.totalMins),c.breaks,c.breakMins,c.eduMins,fmtMins(c.eduMins),lim.maxDay,fmtMins(lim.maxDay),status]);
@@ -1448,7 +1723,7 @@ function generatePDF(){
   const typeMap={performance:'Performance',behaviour:'Behaviour',hs:'Health & Safety',general:'General'};
   let rows='';
   S.children.forEach(c=>{
-    const tm=getTotalMins(c.id),lim=getLim(c.age),pct=Math.round(tm/lim.maxDay*100);
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),pct=Math.round(tm/lim.maxDay*100);
     const status=tm>=lim.maxDay?'OVER LIMIT':pct>=90?'Near limit':'OK';
     const sc=tm>=lim.maxDay?'#b53a2a':pct>=90?'#b8620a':'#1a6a3a';
     const evts=S.entries.filter(e=>e.childId===c.id).sort((a,b)=>a.ts-b.ts);
@@ -1503,7 +1778,7 @@ function renderReport(){
   ne.style.display='none';btns.style.display='block';
   let html='<div class="card"><div class="card-title">Final summary</div>';
   S.children.forEach(c=>{
-    const tm=getTotalMins(c.id),lim=getLim(c.age),pct=Math.round(tm/lim.maxDay*100);
+    const tm=getTotalMins(c.id),lim=getLim(c.age,c.scotland),pct=Math.round(tm/lim.maxDay*100);
     const badge=tm>=lim.maxDay?'badge-red':pct>=90?'badge-amber':'badge-green';
     html+=`<div style="padding:8px 0;border-top:0.5px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><span style="font-weight:700;color:var(--navy)">${childLabel(c)}</span><span class="badge ${badge}">${tm>=lim.maxDay?'OVER LIMIT':pct>=90?'Near limit':'OK'}</span></div><div style="font-size:11px;color:var(--ink3)">${fmtMins(tm)} worked · ${fmtMins(lim.maxDay)} limit</div><div class="prog-bar" style="margin-top:4px"><div class="prog-fill ${pct>=100?'pf-red':pct>=90?'pf-amber':'pf-green'}" style="width:${Math.min(100,pct)}%"></div></div></div>`;
   });
@@ -1533,6 +1808,7 @@ sv('eduDate',nd.toISOString().slice(0,10));
 const hh=String(nd.getHours()).padStart(2,'0'),mm=String(nd.getMinutes()).padStart(2,'0'),tnow=hh+':'+mm;
 ['stepOnTime','stepOffTime','breakStart','breakEnd','commentTime','wrapTime','nwStart','nwEnd','eduStart','eduEnd'].forEach(id=>sv(id,tnow));
 document.getElementById('backBtn').style.display='none';
+updateLegislationStyle();
 updateClock();updateHome();renderCastList();
 // Then sync fresh data from Supabase
 loadFromSupabase();
@@ -1541,6 +1817,179 @@ setInterval(()=>{
   if(currentPage==='hours'){renderHoursCast();renderTimeLog()}
   if(currentPage==='alerts')renderAlerts();
 },30000);
+// ══ TUITION REPORT (PDF + EMAIL) ══
+function buildTuitionReportData(){
+  const prod=S.prod||'Untitled Production',co=S.prodCompany||'',date=S.shootDate||todayStr();
+  const chap=S.chapName||'—',safe=S.safeName||'—';
+  const typeL={tutoring:'On-set tutoring',school:'School day',online:'Online lesson',other:'Other'};
+  // Build per-child data — all sessions, not just today, so lunchtime report covers full picture
+  const rows=[];
+  S.children.forEach(c=>{
+    const lim=getLim(c.age,c.scotland);
+    if(lim.minEdu===0)return; // skip under-5s and 17+
+    const sessions=getEduSessions(c.id).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
+    const todaySessions=sessions.filter(es=>es.date===date);
+    const todayMins=getEduTodayMins(c.id);
+    const fwMins=getEdu4WeekMins(c.id);
+    const todayOk=todayMins>=lim.minEdu;
+    const fwOk=fwMins>=3600;
+    rows.push({c,lim,sessions,todaySessions,todayMins,fwMins,todayOk,fwOk,typeL});
+  });
+  return {prod,co,date,chap,safe,rows,typeL};
+}
+
+function buildTuitionHTML(data,forEmail){
+  const {prod,co,date,chap,safe,rows,typeL}=data;
+  const logoSrc=document.querySelector('.topbar-logo').src;
+  const dateDisp=new Date(date).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  let childRows='';
+  rows.forEach(({c,lim,todaySessions,todayMins,fwMins,todayOk,fwOk})=>{
+    const statusCol=todayOk?'#1a6a3a':'#b8620a';
+    const statusTxt=todayOk?'✓ Met':'⚠ Short';
+    const sessRows=todaySessions.length
+      ? todaySessions.map(es=>{
+          const dur=minDiff(es.start,es.end||es.start);
+          const counted=dur>=30;
+          return `<tr style="background:${counted?'#f8fff8':'#fffbf0'}">
+            <td style="padding:5px 7px">${es.start}${es.end?' – '+es.end:''}</td>
+            <td style="padding:5px 7px">${fmtMins(dur)} ${counted?'':'<span style="color:#b8620a;font-size:9px">(not counted)</span>'}</td>
+            <td style="padding:5px 7px">${typeL[es.type]||es.type}</td>
+            <td style="padding:5px 7px;font-style:italic">${es.subjects||'—'}</td>
+            <td style="padding:5px 7px">${es.tutor||'—'}</td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="5" style="padding:5px 7px;color:#888;font-style:italic">No sessions recorded today</td></tr>`;
+
+    childRows+=`
+    <div style="margin-bottom:18px;border:1px solid #d8d2c6;border-radius:8px;overflow:hidden">
+      <div style="background:#0d2a4a;color:white;padding:9px 13px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700;font-size:13px">${childLabel(c)}${c.scotland?' 🏴󠁧󠁢󠁳󠁣󠁴󠁿':''} <span style="font-size:11px;opacity:0.7">Age ${c.age||'—'} · ${c.year||'—'} · ${c.la||'—'}</span></div>
+        <div style="font-weight:700;font-size:12px;color:${statusCol==='#1a6a3a'?'#6ef5a0':'#ffd080'}">${statusTxt}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#f7f5f0">
+          <th style="text-align:left;padding:5px 7px;color:#7a95b0;font-size:9px;text-transform:uppercase;border-bottom:1px solid #d8d2c6">Time</th>
+          <th style="text-align:left;padding:5px 7px;color:#7a95b0;font-size:9px;text-transform:uppercase;border-bottom:1px solid #d8d2c6">Duration</th>
+          <th style="text-align:left;padding:5px 7px;color:#7a95b0;font-size:9px;text-transform:uppercase;border-bottom:1px solid #d8d2c6">Type</th>
+          <th style="text-align:left;padding:5px 7px;color:#7a95b0;font-size:9px;text-transform:uppercase;border-bottom:1px solid #d8d2c6">Subjects</th>
+          <th style="text-align:left;padding:5px 7px;color:#7a95b0;font-size:9px;text-transform:uppercase;border-bottom:1px solid #d8d2c6">Tutor</th>
+        </tr></thead>
+        <tbody>${sessRows}</tbody>
+      </table>
+      <div style="background:#f7f5f0;padding:7px 13px;display:flex;gap:20px;font-size:11px;border-top:1px solid #d8d2c6">
+        <span>Today: <strong style="color:${statusCol}">${fmtMins(todayMins)}</strong> of ${fmtMins(lim.minEdu)} min required</span>
+        <span>4-week total: <strong style="color:${fwOk?'#1a6a3a':'#b8620a'}">${fmtMins(fwMins)}</strong> of 60h (${fwOk?'✓ OK':'⚠ Below'})</span>
+      </div>
+    </div>`;
+  });
+
+  if(!rows.length) childRows='<p style="color:#888;font-style:italic;padding:12px 0">No children with education requirements found.</p>';
+
+  const totalTodayMins=rows.reduce((acc,r)=>acc+r.todayMins,0);
+  const allTodayOk=rows.length>0&&rows.every(r=>r.todayOk);
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tuition Report — ${prod} — ${date}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:12px;color:#0d2a4a;margin:0;padding:0;background:#f7f5f0}
+    .page{padding:24px 28px;max-width:720px;margin:0 auto;background:white}
+    @media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:16px}}
+  </style></head><body><div class="page">
+  <!-- HEADER -->
+  <div style="border-bottom:3px solid #f0b429;padding-bottom:11px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;align-items:center;gap:10px">
+      ${forEmail?'':'<img src="'+logoSrc+'" style="width:40px;height:40px;border-radius:7px">'}
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#0d2a4a">North Star Tuition</div>
+        <div style="font-size:9px;color:#7a95b0">Lunchtime Tuition Report · Film &amp; TV Production</div>
+      </div>
+    </div>
+    <div style="text-align:right;font-size:10px;color:#7a95b0;line-height:1.8">
+      <div><strong>${co?co+' · ':''}${prod}</strong></div>
+      <div>${dateDisp}</div>
+      <div>Chaperone: ${chap}</div>
+      <div>Safeguarding: ${safe}</div>
+      <div>Generated: ${new Date().toLocaleString('en-GB')}</div>
+    </div>
+  </div>
+  <!-- SUMMARY BANNER -->
+  <div style="background:${allTodayOk?'#edf7f2':'#fdf6ec'};border:1px solid ${allTodayOk?'#a8dbbe':'#f5d9ae'};border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-weight:700;font-size:14px;color:${allTodayOk?'#1a6a3a':'#b8620a'}">${allTodayOk?'✓ All tuition requirements met today':'⚠ Some children below daily tuition minimum'}</div>
+      <div style="font-size:11px;color:#3a5575;margin-top:3px">${rows.length} child${rows.length===1?'':'ren'} with education requirements · Total tuition today: ${fmtMins(totalTodayMins)}</div>
+    </div>
+    <div style="font-size:22px;font-weight:700;color:${allTodayOk?'#1a6a3a':'#b8620a'}">${fmtMins(totalTodayMins)}</div>
+  </div>
+  <!-- PER CHILD -->
+  ${childRows}
+  <!-- FOOTER -->
+  <div style="margin-top:20px;padding-top:10px;border-top:0.5px solid #d8d2c6;font-size:9px;color:#aaa;display:flex;justify-content:space-between">
+    <div>North Star Tuition · northstartuition.com · mark@northstartuition.com</div>
+    <div>Tutor signature: _________________________</div>
+  </div>
+  </div></body></html>`;
+}
+
+function generateTuitionPDF(){
+  if(!S.children.filter(c=>getLim(c.age,c.scotland).minEdu>0).length){
+    showNotif('No children with education requirements','warn');return;
+  }
+  const data=buildTuitionReportData();
+  const html=buildTuitionHTML(data,false);
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const w=window.open(url,'_blank');
+  if(w)setTimeout(()=>w.print(),700);
+  else{const a=document.createElement('a');a.href=url;a.download='Tuition-Report-'+data.date+'.html';a.click();}
+  showNotif('Tuition PDF ready — Print → Save as PDF','ok');
+}
+
+function emailTuitionReport(){
+  if(!S.children.filter(c=>getLim(c.age,c.scotland).minEdu>0).length){
+    showNotif('No children with education requirements','warn');return;
+  }
+  const data=buildTuitionReportData();
+  const prod=data.prod,date=data.date;
+  const dateDisp=new Date(date).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // Build plain-text email body (mail clients strip HTML from mailto)
+  let body=`LUNCHTIME TUITION REPORT\n`;
+  body+=`${prod} · ${dateDisp}\n`;
+  body+=`Chaperone: ${data.chap} · Safeguarding: ${data.safe}\n`;
+  body+=`Generated: ${new Date().toLocaleString('en-GB')}\n\n`;
+  body+=`${'─'.repeat(50)}\n\n`;
+
+  let allOk=true;
+  data.rows.forEach(({c,lim,todaySessions,todayMins,fwMins,todayOk,fwOk,typeL})=>{
+    if(!todayOk)allOk=false;
+    body+=`${childLabel(c)}${c.scotland?' [Scotland]':''}\n`;
+    body+=`Age ${c.age||'—'} · ${c.year||'—'} · ${c.la||'—'}\n`;
+    if(todaySessions.length){
+      todaySessions.forEach(es=>{
+        const dur=minDiff(es.start,es.end||es.start);
+        body+=`  ${es.start}${es.end?' – '+es.end:''} · ${fmtMins(dur)}${dur<30?' (not counted — under 30 min)':''}\n`;
+        if(es.subjects)body+=`  Subjects: ${es.subjects}\n`;
+        if(es.tutor)body+=`  Tutor: ${es.tutor}\n`;
+      });
+    } else {
+      body+=`  No sessions recorded today\n`;
+    }
+    body+=`  Today total: ${fmtMins(todayMins)} of ${fmtMins(lim.minEdu)} required — ${todayOk?'MET':'SHORT'}\n`;
+    body+=`  4-week total: ${fmtMins(fwMins)} of 60h — ${fwOk?'OK':'Below minimum'}\n\n`;
+  });
+
+  body+=`${'─'.repeat(50)}\n`;
+  body+=`SUMMARY: ${allOk?'All tuition requirements met today.':'Some children below daily minimum — please review.'}\n`;
+  body+=`Total tuition today: ${fmtMins(data.rows.reduce((acc,r)=>acc+r.todayMins,0))}\n\n`;
+  body+=`North Star Tuition · northstartuition.com`;
+
+  const subject=encodeURIComponent(`Tuition Report — ${prod} — ${dateDisp}`);
+  const encodedBody=encodeURIComponent(body);
+  const mailto=`mailto:mark@northstartuition.com?subject=${subject}&body=${encodedBody}`;
+  window.location.href=mailto;
+  showNotif('Opening email client…','ok');
+}
+
 setInterval(updateClock,1000);
 </script>
 </body>
